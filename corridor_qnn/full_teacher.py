@@ -4,7 +4,7 @@ import numpy as np
 from .full_environment import BASE_FEATURES
 
 
-def teacher_action(features):
+def legacy_teacher_action(features):
     f=np.asarray(features)
     wb=math.atan2(f[9],f[8]); eb=math.atan2(f[13],f[12])
     last=int(np.argmax(f[len(BASE_FEATURES):])) if f[len(BASE_FEATURES):].sum() else -1
@@ -23,4 +23,21 @@ def teacher_action(features):
     if wb>.18: return 2
     if wb<-.18: return 3
     if f[11]<.85 and last!=13: return 13
+    return 0
+
+
+def teacher_action(features):
+    """Keep the original combat rules; pulse use while following a clear route."""
+    f=np.asarray(features)
+    if f[15]>.5 or (f[31]>.5 and f[3]*9<3):
+        return legacy_teacher_action(f)
+    wb=math.atan2(f[9],f[8])
+    last=int(np.argmax(f[len(BASE_FEATURES):])) if f[len(BASE_FEATURES):].sum() else -1
+    if wb>.16: return 2
+    if wb<-.16: return 3
+    # USE is edge-triggered in Doom: a movement-only action releases the key.
+    if f[11]*128<60 and last not in (12,13): return 13
+    if f[22]>.5 and f[11]*128>=60:
+        if last in (0,7,13): return 1
+        if last==1: return 4
     return 0

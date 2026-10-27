@@ -17,6 +17,7 @@ DOOM Corridor and Full-Game QNN (NixOS, rootless Podman)
   ./run-nixos.sh full-train --model quantum --decisions 6000
   ./run-nixos.sh full-eval --policy quantum --episodes 20 --record outputs/full_game/qnn.gif
   ./run-nixos.sh full-campaign --policy quantum --start-map MAP01
+  ./run-nixos.sh python scripts/navigation-diagnostics.py
 Use --skill 5 to evaluate at official corridor difficulty.
 HELP
   exit 0
@@ -33,10 +34,14 @@ build() { "$ENGINE" build -t "$IMAGE" -f "$DIR/Dockerfile" "$DIR"; }
 if [[ "$1" == "build" ]]; then build; exit 0; fi
 if ! "$ENGINE" image inspect "$IMAGE" >/dev/null 2>&1; then build; fi
 mkdir -p "$DIR/outputs/models"
-args=(run --rm -v "$DIR:/app" -w /app -e HOME=/tmp)
+args=(run --rm -v "$DIR:/app" -w /app -e HOME=/tmp -e PYTHONPATH=/app)
 if [[ "$ENGINE" == podman ]]; then args+=(--userns=keep-id)
 else args+=(--user "$(id -u):$(id -g)"); fi
 cli=("$@")
+if [[ "$1" == python ]]; then
+  args+=(--entrypoint python)
+  cli=("${@:2}")
+fi
 for ((i=0; i<${#cli[@]}; i++)); do
   wad=""
   if [[ ${cli[i]} == --iwad && $((i+1)) -lt ${#cli[@]} ]]; then

@@ -24,7 +24,8 @@ def write_wad(path, lumps):
 
 @pytest.fixture
 def small_wad(tmp_path):
-    vertices=[(-256,-256),(256,-256),(256,256),(-256,256)]
+    # Clockwise: the sector lies on each linedef's front (right) side.
+    vertices=[(256,-256),(-256,-256),(-256,256),(256,256)]
     return write_wad(tmp_path/'test.wad',[
         ('MAP01',b''),('THINGS',b''),
         ('LINEDEFS',b''.join(struct.pack('<7H',i,(i+1)%4,1,11 if i==0 else 0,0,0,65535) for i in range(4))),
@@ -83,11 +84,65 @@ def test_geometry_exit_is_read_from_wad(small_wad):
     nav=Navigator(small_wad,'MAP01')
     assert np.allclose(nav.exits[0],[0,-256])
     target,interaction=nav.update(np.array([0.,0.]))
-    assert np.isfinite(target).all() and interaction==256
+    assert np.isfinite(target).all() and interaction>80
     assert nav.reachable>1
     assert target[1]<0
     nav.reset(); assert not nav.path and not nav.visits.any()
     with pytest.raises(ValueError): read_map(small_wad,'MAP02')
+
+
+def test_exit_approach_front_side_and_persistence(small_wad):
+    nav=Navigator(small_wad,'MAP01')
+    target,_=nav.update(np.array([0.,-210.]))
+    assert np.array_equal(target,nav.exits[0])
+    for _ in range(100):
+        target,_=nav.update(np.array([0.,-210.]))
+    assert np.array_equal(target,nav.exits[0])
+    assert nav.mode=='exit'  # Do not abandon the switch after eight visits.
+    assert nav.exit_approaches[0][0][1]>-256
+
+
+def test_player_clearance_and_rotation_not_collision(small_wad):
+    nav=Navigator(small_wad,'MAP01')
+    assert not nav.free(nav.grid([248.,0.]))
+    assert nav.free(nav.grid([208.,0.]))
+    assert not nav.clear(np.array([208.,0.]),np.array([280.,0.]))
+    for _ in range(16): nav.update(np.array([0.,0.]),yaw=0,last_action=2)
+    assert nav.collision_events==0
+    for _ in range(16): nav.update(np.array([0.,0.]),yaw=0,last_action=0)
+    assert nav.collision_events>0 and nav.temporary
+
+
+def test_use_release_and_combat_preserved():
+    from corridor_qnn.full_teacher import legacy_teacher_action
+    from corridor_qnn.full_environment import BASE_FEATURES
+    f=np.zeros(FEATURE_DIM,dtype=np.float32); f[8]=1; f[11]=.3
+    assert teacher_action(f)==13
+    f[len(BASE_FEATURES)+13]=1
+    assert teacher_action(f)==0
+    for enemy_bearing in (-.4,0,.4):
+        f[15]=1; f[1]=1; f[12]=1; f[13]=enemy_bearing
+        assert teacher_action(f)==legacy_teacher_action(f)
+
+
+@pytest.mark.parametrize('width,spanned',[(16,True),(64,False)])
+def test_narrow_depression_footprint(tmp_path,width,spanned):
+    vertices=[(-128,-128),(-128,128),(0,-128),(0,128),(width,-128),
+              (width,128),(128,-128),(128,128)]
+    # Three sectors: left bank, depression, right bank. Only a depression
+    # narrower than the player's diameter can be crossed without falling in.
+    sides=b''.join(struct.pack('<hh8s8s8sH',0,0,b'-',b'-',b'-',i) for i in range(3))
+    lines=[(2,3,4,0,0,0,1),(4,5,4,0,0,1,2),
+           (0,2,1,0,0,0,65535),(2,4,1,0,0,1,65535),(4,6,1,0,0,2,65535),
+           (1,3,1,0,0,0,65535),(3,5,1,0,0,1,65535),(5,7,1,0,0,2,65535),
+           (0,1,1,0,0,0,65535),(6,7,1,0,0,2,65535)]
+    wad=write_wad(tmp_path/'pit.wad',[('MAP01',b''),('THINGS',b''),
+        ('LINEDEFS',b''.join(struct.pack('<7H',*line) for line in lines)),
+        ('SIDEDEFS',sides),('VERTEXES',b''.join(struct.pack('<hh',*v) for v in vertices)),
+        ('SECTORS',b''.join(struct.pack('<hh8s8shhh',floor,128,b'FLOOR',b'CEIL',160,0,0) for floor in (0,-128,0)))])
+    nav=Navigator(wad,'MAP01')
+    assert (1 in nav.spanned_sectors)==spanned
+    assert nav.clear(np.array([-48.,0.]),np.array([width+48.,0.]))==spanned
 
 
 def test_full_observation_contract():
@@ -157,6 +212,8 @@ def test_full_eval_records_policy_actions(tmp_path,monkeypatch):
     assert result['summary']['completion_rate']==0
     assert json.loads((tmp_path/'MAP01_quantum.json').read_text())['summary']['seeds']==[800,801]
     with Image.open(tmp_path/'qnn.gif') as image: assert image.format=='GIF'
+    with pytest.raises(FileExistsError,match='Preserve existing results'):
+        full_cli.evaluate(args,model=FullActorCritic())
 
 
 def synthetic_step_environment(before,after,raw=0,finished=False,dead=False,engine_timeout=False):
