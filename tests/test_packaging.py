@@ -166,3 +166,27 @@ with open(os.environ['TASK_ENGINE_LOG'], 'a') as f:
     assert run[run.index('-v') + 1] == f'{checkout}:/app'
     assert '--userns=keep-id' in run
     assert run[-3:] == ['eval', '--checkpoint', 'pretrained/quantum_skill3_candidate.pt']
+
+
+@pytest.mark.parametrize('equals',[False,True])
+def test_launcher_external_iwad_is_single_readonly_file(tmp_path,monkeypatch,equals):
+    import os
+    checkout=tmp_path/'checkout'; checkout.mkdir()
+    launcher=checkout/'run-nixos.sh'; shutil.copy2(ROOT/'run-nixos.sh',launcher)
+    wad=tmp_path/'licensed game.wad'; wad.write_bytes(b'IWAD')
+    engine=tmp_path/'podman'; log=tmp_path/'engine.jsonl'
+    engine.write_text(f'''#!{sys.executable}
+import json, os, sys
+with open(os.environ['TASK_ENGINE_LOG'], 'a') as f:
+    f.write(json.dumps(sys.argv[1:]) + '\\n')
+''')
+    engine.chmod(0o755)
+    monkeypatch.setenv('PATH',str(tmp_path)+os.pathsep+os.environ['PATH'])
+    monkeypatch.setenv('DOOM_CORRIDOR_ENGINE','podman')
+    monkeypatch.setenv('TASK_ENGINE_LOG',str(log))
+    flag=['--iwad='+str(wad)] if equals else ['--iwad',str(wad)]
+    subprocess.run([str(launcher),'full-doctor',*flag],check=True)
+    run=json.loads(log.read_text().splitlines()[-1])
+    assert f'{wad}:/tmp/full-game-external.wad:ro' in run
+    assert str(tmp_path)+':/tmp' not in run
+    assert ('--iwad=/tmp/full-game-external.wad' in run if equals else run[-1]=='/tmp/full-game-external.wad')

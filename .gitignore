@@ -33,3 +33,8 @@ venv/
 .DS_Store
 *.swp
 *.tmp
+
+# Local IWADs and generated demonstration datasets
+*.wad
+*.WAD
+*.npz

@@ -1,4 +1,4 @@
-# Hybrid quantum-classical learning for ViZDoom Deadly Corridor
+# Hybrid quantum-classical learning for ViZDoom
 
 The project implements a hybrid quantum-classical policy for ViZDoom's stock
 Deadly Corridor scenario. It combines a convolutional neural network (CNN),
@@ -10,6 +10,52 @@ The quantum circuit is simulated classically with PyTorch complex autograd.
 No quantum hardware or quantum SDK is required. Observations include
 **privileged simulator-state features in addition to screenshots**; this is
 not a pixels-only benchmark. The results do not establish quantum advantage.
+
+## Full Doom / Freedoom levels
+
+The separate full-game environment runs ViZDoom's bundled Freedoom Phase 2
+IWAD, or an externally supplied Doom II IWAD using `--iwad PATH`. It supports
+MAP01–MAP30, optional MAP31/32 (`--secret-maps`), difficulty 1–5, headless
+execution, seeded episodes, screenshots, GIFs and native `.lmp` recordings.
+Doom II assets are not distributed. The existing container/Nix launcher
+requires no new dependencies or system configuration changes.
+
+```bash
+./run-nixos.sh full-doctor --map MAP01
+./run-nixos.sh full-eval --policy random --map MAP01 --episodes 20
+./run-nixos.sh full-eval --policy teacher --map MAP01 --episodes 20
+mkdir -p outputs/full_game
+./run-nixos.sh full-train --model quantum --map MAP01 --decisions 6000 \
+  --epochs 12 --transfer-corridor pretrained/quantum_skill1_baseline.pt \
+  > outputs/full_game/train_quantum.log 2>&1
+./run-nixos.sh full-eval --policy quantum --map MAP01 --episodes 20 \
+  --checkpoint outputs/full_game/models/quantum.pt \
+  --record outputs/full_game/qnn_MAP01.gif --demo outputs/full_game/qnn_MAP01.lmp
+./run-nixos.sh full-campaign --policy quantum --start-map MAP01 --end-map MAP30
+```
+
+A shared privileged IWAD geometry planner supplies waypoints to the scripted
+teacher and learned policies. The hybrid uses the existing CNN and genuinely
+trainable six-qubit/two-layer circuit, 54 navigation/combat/history features,
+and 21 movement, shooting, USE and weapon actions. The network selects every
+learned-policy action; the teacher does not override it. This is not
+pixels-only learning or evidence of quantum advantage.
+
+Full-game checkpoints have a separate schema. Optional partial transfer copies
+compatible corridor modules; observation fusion and action heads start new.
+The bundled corridor checkpoints are preserved. Training and benchmark artifacts
+are generated under `outputs/full_game/` and are not bundled with the repository.
+
+Completion requires the native map-exit event, independently of shaped reward.
+The campaign runner progresses only after actual exits and initializes each map
+with **fresh inventory**; continuous campaign state is not implemented. Keys,
+lifts, teleports and complex map mechanics remain limitations.
+
+See the [full-game guide](docs/FULL_GAME.md) for architecture, flags, metrics,
+recording behavior and campaign semantics, and
+[measured results](docs/FULL_GAME_RESULTS.md) for the bounded benchmark and exact
+reproduction commands. Deadly Corridor commands below retain their original
+behavior.
 
 ## Architecture
 

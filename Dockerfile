@@ -19,6 +19,8 @@ COPY tests/ tests/
 COPY pretrained/ pretrained/
 COPY scripts/ scripts/
 RUN python -m pip install --no-deps .
-RUN mkdir -p outputs/models
+# ViZDoom ships the Freedoom Phase 2 IWAD and official full-game config.
+RUN python -c "import pathlib,vizdoom; assert pathlib.Path(vizdoom.install_path,'freedoom2.wad').is_file(); assert pathlib.Path(vizdoom.scenarios_path,'freedoom2.cfg').is_file()"
+RUN mkdir -p outputs/models outputs/full_game/models
 ENTRYPOINT ["python","-m","corridor_qnn"]
 CMD ["--help"]

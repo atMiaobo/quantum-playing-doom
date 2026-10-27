@@ -63,6 +63,8 @@ def parser():
     cmp.add_argument('--quantum-checkpoint',type=Path)
     cmp.add_argument('--classical-checkpoint',type=Path)
     cmp.add_argument('--episodes',type=int,default=10)
+    from .full_cli import add_commands
+    add_commands(sp)
     return p
 
 
@@ -148,6 +150,10 @@ def compare(args):
 
 def main():
     args=parser().parse_args()
+    if args.cmd.startswith('full-'):
+        from .full_cli import run
+        run(args)
+        return
     if args.cmd=='test':
         import pytest
         raise SystemExit(pytest.main(['-q','tests']))
