@@ -1,0 +1,29 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "doom-corridor-qnn"
+version = "0.2.0"
+description = "Hybrid quantum-classical imitation and reinforcement learning for ViZDoom Deadly Corridor"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "torch>=2.2,<3",
+    "numpy>=1.26,<3",
+    "vizdoom>=1.3.1,<1.4",
+    "Pillow>=10,<13",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8,<10"]
+
+[project.scripts]
+doom-corridor = "corridor_qnn.__main__:main"
+
+[tool.setuptools.packages.find]
+include = ["corridor_qnn*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]

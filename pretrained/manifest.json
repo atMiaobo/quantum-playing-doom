@@ -1,0 +1,28 @@
+{
+  "quantum_skill1_baseline.pt": {
+    "bytes": 278235,
+    "sha256": "5ff9203e197e476ac1b2ca121fe3fc1c014bfcc3a84c449cbcd7364a9e8c9433",
+    "kind": "quantum",
+    "qubits": 6,
+    "layers": 2,
+    "metadata": {
+      "training": "behavior_cloning",
+      "samples": 2858,
+      "val_accuracy": 0.9196,
+      "note": "demonstrations from heuristic, not expert wins"
+    }
+  },
+  "quantum_skill3_candidate.pt": {
+    "bytes": 278235,
+    "sha256": "543ca12d2c2b9193da5636c43d53ff5db164c51e7cf37c8844f000d2fcbefcf2",
+    "kind": "quantum",
+    "qubits": 6,
+    "layers": 2,
+    "metadata": {
+      "training": "behavior_cloning",
+      "samples": 5220,
+      "val_accuracy": 0.9464,
+      "note": "demonstrations from heuristic, not expert wins"
+    }
+  }
+}

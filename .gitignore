@@ -1,0 +1,35 @@
+# Generated runs and local ViZDoom configuration
+/outputs/*
+!/outputs/.gitkeep
+/_vizdoom/
+/_vizdoom.ini
+/vizdoom-crash.log
+/gdb-respfile-*
+/core
+/core.*
+*.pt
+!/pretrained/*.pt
+*.gif
+*.mp4
+*.lmp
+# Python environments, packaging and caches
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.coverage
+htmlcov/
+*.egg-info/
+build/
+dist/
+.venv/
+venv/
+.direnv/
+.env
+.env.*
+!.env.example
+# Editors and local configuration
+.idea/
+.vscode/
+.DS_Store
+*.swp
+*.tmp
