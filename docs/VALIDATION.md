@@ -1,4 +1,11 @@
-# Packaging validation
+# Validation history
+
+Full-game implementation and live Podman validation on 2026-10-28 are documented
+in [FULL_GAME_RESULTS.md](FULL_GAME_RESULTS.md). The packaging-only report below
+is retained as historical context; its engine-access limitations no longer
+describe the current validation run.
+
+## Packaging validation (2026-10-27)
 
 Validation was performed on 2026-10-27. The original project was read only;
 file contents, permission modes, and modification times were compared against
