@@ -1,5 +1,8 @@
 # Hybrid quantum-classical learning for ViZDoom
 
+<img width="320" height="240" alt="qnn_MAP01_exit" src="https://github.com/user-attachments/assets/cce490de-76a6-41f9-9cf4-b529e2ef74f0" />
+
+
 The project implements a hybrid quantum-classical policy for ViZDoom's stock
 Deadly Corridor scenario. It combines a convolutional neural network (CNN),
 structured environment features, a parameterized quantum circuit, and classical
