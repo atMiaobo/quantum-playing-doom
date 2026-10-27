@@ -31,13 +31,21 @@ and turning with fire, USE, forward+USE, forward+turn, weapon slots 2–4,
 and next weapon. Buttons are matched by name rather than configuration order.
 
 A shared **privileged classical navigator** parses Doom-format IWAD vertices,
-linedefs, sidedefs and sector heights. It rasterizes an approximate 32-unit
-collision grid, finds routes to exit linedefs when reachable, and falls back
+linedefs, sidedefs and sector heights. The default uses a 16-unit player-clearance
+grid, front-side exit approaches and bounded local collision recovery; the
+original 32-unit grid is available with `--navigation legacy`. It finds routes
+to exit linedefs when reachable, and falls back
 to less-visited reachable cells. Exit positions come from map geometry; there
 are no map-specific coordinates or recorded action sequences. Closed doors
 are treated as potentially traversable. This approximation does not solve
 keys, lifts, teleports, dynamic geometry or arbitrary scripted specials.
 Hexen/UDMF map formats are rejected explicitly.
+
+See the [MAP01 navigation experiment](MAP01_NAVIGATION.md) for the measured
+follow-up and conservative DAgger update. Historical results in
+`FULL_GAME_RESULTS.md` use `--navigation legacy --teacher-version legacy`.
+Evaluation and training refuse existing output result/checkpoint files; choose
+new destinations to preserve earlier runs.
 
 The scripted teacher steers toward these waypoints, aims at visible engine
 monster labels, shoots, chooses a shotgun when acquired, and attempts USE,

@@ -6,7 +6,7 @@ import math
 import numpy as np
 from .features import Observation, image_to_gray, bearing_to, is_monster, position
 from .full_actions import ACTIONS, BUTTONS, action_vectors
-from .full_navigation import Navigator, map_name
+from .full_navigation import Navigator, LegacyNavigator, map_name
 
 BASE_FEATURES = (
     'health','ammo','armor','weapon','kills','items','yaw_cos','yaw_sin',
@@ -44,10 +44,10 @@ def shape_reward(before, after, new_cell, outcome):
 
 class FullDoom:
     def __init__(self, map='MAP01', skill=1, frame_skip=4, max_steps=1000,
-                 seed=42, iwad=None, secret_maps=False, visible=False):
+                 seed=42, iwad=None, secret_maps=False, visible=False, navigation='improved'):
         import vizdoom as vzd
         self._settings=dict(map=map,skill=skill,frame_skip=frame_skip,max_steps=max_steps,
-                            seed=seed,iwad=iwad,secret_maps=secret_maps,visible=visible)
+                            seed=seed,iwad=iwad,secret_maps=secret_maps,visible=visible,navigation=navigation)
         self._recording=False
         self.map = map_name(map, secret_maps)
         if not 1 <= skill <= 5 or min(frame_skip,max_steps)<1:
@@ -57,7 +57,9 @@ class FullDoom:
         self.iwad = Path(iwad) if iwad else Path(vzd.install_path)/'freedoom2.wad'
         if not self.iwad.is_file():
             raise FileNotFoundError(f'IWAD absent: {self.iwad}; supply --iwad assets/freedoom2.wad')
-        self.navigator=Navigator(self.iwad,self.map)
+        self.navigation=navigation
+        if navigation not in ('legacy','improved'): raise ValueError('Unknown navigation version')
+        self.navigator=(LegacyNavigator if navigation=='legacy' else Navigator)(self.iwad,self.map)
         self.iwad_hash=hashlib.sha256(self.iwad.read_bytes()).hexdigest()
         self.game=vzd.DoomGame()
         try:
@@ -71,6 +73,7 @@ class FullDoom:
             self.game.set_screen_resolution(vzd.ScreenResolution.RES_320X240)
             self.game.set_labels_buffer_enabled(True)
             self.game.set_objects_info_enabled(True)
+            self.game.set_sectors_info_enabled(navigation=='improved')
             self.game.set_depth_buffer_enabled(True)
             self.game.set_automap_buffer_enabled(True)
             self.game.set_audio_buffer_enabled(False)
@@ -122,7 +125,8 @@ class FullDoom:
         cell=tuple(np.floor(xy/64).astype(int))
         self.visited.add(cell)
         self.positions.append(xy.copy())
-        target,interaction=self.navigator.update(xy)
+        if self.navigation=='legacy': target,interaction=self.navigator.update(xy)
+        else: target,interaction=self.navigator.update(xy,v['ANGLE'],self.last_action,bool(self.previous[15]))
         wb,wd=bearing_to(*xy,v['ANGLE'],*target)
         labels=[l for l in state.labels if is_monster(l) and l.width*l.height>=6]
         # Visible engine labels only; objects behind walls never become combat targets.

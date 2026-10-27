@@ -16,6 +16,13 @@ not a pixels-only benchmark. The results do not establish quantum advantage.
 
 ## Full Doom / Freedoom levels
 
+The [bounded MAP01 navigation study](docs/MAP01_NAVIGATION.md) documents the
+improved planner, one conservative DAgger iteration, matched gameplay benchmarks,
+quantum-disabled ablation and reproduction commands. The original benchmark and
+`outputs/full_game/models/quantum.pt` are preserved. Use `--navigation legacy
+--teacher-version legacy` to reproduce the original controller; the default now
+uses the improved planner. Use a fresh `--output-dir` for each evaluation.
+
 The separate full-game environment runs ViZDoom's bundled Freedoom Phase 2
 IWAD, or an externally supplied Doom II IWAD using `--iwad PATH`. It supports
 MAP01–MAP30, optional MAP31/32 (`--secret-maps`), difficulty 1–5, headless

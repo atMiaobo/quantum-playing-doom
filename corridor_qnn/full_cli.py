@@ -9,7 +9,7 @@ from .full_environment import FullDoom, FEATURE_NAMES
 from .full_actions import ACTIONS, ACTION_NAMES
 from .full_navigation import map_name
 from .full_models import FullActorCritic, load_full, save_full, transfer_corridor
-from .full_teacher import teacher_action
+from .full_teacher import teacher_action, legacy_teacher_action
 from .training import seed_everything, infer
 
 ROOT=Path('outputs/full_game')
@@ -26,6 +26,8 @@ def add_commands(sp):
         p.add_argument('--max-steps',type=int,default=1000)
         p.add_argument('--seed',type=int,default=800 if command!='full-train' else 42)
         p.add_argument('--output-dir',type=Path,default=ROOT)
+        p.add_argument('--navigation',choices=('legacy','improved'),default='improved')
+        p.add_argument('--teacher-version',choices=('legacy','improved'),default='improved')
         if command in ('full-eval','full-campaign'):
             p.add_argument('--policy',choices=('random','teacher','quantum','classical'),default='quantum')
             p.add_argument('--checkpoint',type=Path)
@@ -33,6 +35,8 @@ def add_commands(sp):
             p.add_argument('--record',type=Path,help='GIF of first episode, captured across its full duration')
             p.add_argument('--demo',type=Path,help='Native ViZDoom .lmp recording of first episode')
             p.add_argument('--stochastic',action='store_true')
+            p.add_argument('--trace-dir',type=Path,help='Save per-decision JSON trajectories and sampled frames')
+            p.add_argument('--quantum-disabled',action='store_true',help='Set the hybrid quantum residual gain to zero')
         if command=='full-campaign':
             p.add_argument('--start-map',default='MAP01')
             p.add_argument('--end-map',default='MAP30')
@@ -53,7 +57,8 @@ def add_commands(sp):
 
 def environment(args, map=None):
     return FullDoom(map=map or args.map,skill=args.skill,frame_skip=args.frame_skip,
-                    max_steps=args.max_steps,seed=args.seed,iwad=args.iwad,secret_maps=args.secret_maps)
+                    max_steps=args.max_steps,seed=args.seed,iwad=args.iwad,secret_maps=args.secret_maps,
+                    navigation=getattr(args,'navigation','improved'))
 
 
 def json_write(path,data):
@@ -63,6 +68,8 @@ def json_write(path,data):
 
 def evaluate(args, model=None, seeds=None, write=True):
     supplied_model=model is not None
+    result_path=args.output_dir/f'{args.map}_{args.policy}.json'
+    if write and result_path.exists(): raise FileExistsError(f'Preserve existing results: {result_path}; use a new --output-dir')
     if args.episodes<1: raise ValueError('episodes must be positive')
     if args.record and args.record.suffix.lower()!='.gif':
         raise ValueError('--record supports GIF; use a .gif path')
@@ -70,13 +77,17 @@ def evaluate(args, model=None, seeds=None, write=True):
     seeds=list(seeds) if seeds is not None else list(range(args.seed,args.seed+args.episodes))
     if model is None and args.policy in ('quantum','classical'):
         model=load_full(args.checkpoint or args.output_dir/'models'/f'{args.policy}.pt',args.policy)
-    if model is not None: model.eval()
+    if model is not None:
+        model.eval()
+        if getattr(args,'quantum_disabled',False):
+            if model.kind!='quantum': raise ValueError('Quantum ablation requires a hybrid checkpoint')
+            with torch.no_grad(): model.quantum_gain.zero_()
     records=[]; frames=[]; started=time.perf_counter(); inference_seconds=0.
     with environment(args) as env:
         for ep,seed in enumerate(seeds):
             rng=np.random.default_rng(seed)
             obs=env.reset(seed=seed,demo=args.demo if ep==0 else None)
-            start=time.perf_counter()
+            start=time.perf_counter(); trace=[]; samples=[]
             for step in range(args.max_steps):
                 if args.record and ep==0 and step%max(1,args.max_steps//400)==0:
                     frame=Image.fromarray(obs.frame.copy())
@@ -84,13 +95,26 @@ def evaluate(args, model=None, seeds=None, write=True):
                     frames.append(frame)
                 t=time.perf_counter()
                 if args.policy=='random': action=int(rng.integers(len(ACTIONS)))
-                elif args.policy=='teacher': action=teacher_action(obs.features)
+                elif args.policy=='teacher': action=(legacy_teacher_action if getattr(args,'teacher_version','improved')=='legacy' else teacher_action)(obs.features)
                 else: action=infer(model,obs,deterministic=not args.stochastic)
                 inference_seconds+=time.perf_counter()-t
+                if getattr(args,'trace_dir',None):
+                    trace.append(dict(step=step,action=action,position=obs.context['position'],
+                        yaw=obs.context['yaw'],waypoint=obs.context['waypoint'],
+                        features=obs.features.tolist(),health=env.v['HEALTH'],kills=env.v['KILLCOUNT']))
+                    if step%100==0: samples.append(Image.fromarray(obs.frame.copy()).resize((240,180)))
                 obs,_,done,info=env.step(action)
                 if done: break
             info.update(seed=seed,wall_seconds=time.perf_counter()-start)
             records.append(info)
+            if getattr(args,'trace_dir',None):
+                path=args.trace_dir/f'{args.policy}_{seed}'
+                json_write(path.with_suffix('.json'),dict(episode=info,trace=trace))
+                sheet=Image.new('RGB',(240*5,200*((len(samples)+4)//5)))
+                for i,frame in enumerate(samples):
+                    sheet.paste(frame,((i%5)*240,(i//5)*200))
+                    ImageDraw.Draw(sheet).text(((i%5)*240,(i//5)*200+180),f'step {i*100}',fill='white')
+                sheet.save(path.with_suffix('.png'))
         identity=dict(iwad=str(env.iwad),iwad_sha256=env.iwad_hash)
     if args.record and frames:
         args.record.parent.mkdir(parents=True,exist_ok=True)
@@ -98,6 +122,8 @@ def evaluate(args, model=None, seeds=None, write=True):
         frames[0].save(args.record,format='GIF',save_all=True,append_images=frames[1:],duration=round(interval),loop=0)
     metrics=('kills','survival_seconds','coverage_cells','items','pickup_events','health','raw_reward','shaped_reward','steps','max_displacement','wall_seconds')
     summary=dict(policy=args.policy,map=args.map,skill=args.skill,seeds=seeds,episodes=len(seeds),
+                 navigation=getattr(args,'navigation','improved'),teacher_version=getattr(args,'teacher_version','improved'),
+                 quantum_disabled=getattr(args,'quantum_disabled',False),
                  max_steps=args.max_steps,frame_skip=args.frame_skip,**identity,
                  completion_rate=float(np.mean([r['completed'] for r in records])),
                  death_rate=float(np.mean([r['death'] for r in records])),
@@ -113,7 +139,7 @@ def evaluate(args, model=None, seeds=None, write=True):
         summary['checkpoint_sha256']=hashlib.sha256(Path(checkpoint).read_bytes()).hexdigest() if not supplied_model and Path(checkpoint).is_file() else None
     result=dict(summary=summary,episodes=records)
     if write:
-        json_write(args.output_dir/f'{args.map}_{args.policy}.json',result)
+        json_write(result_path,result)
         print('SUMMARY',json.dumps(summary),flush=True)
     return result
 
@@ -147,6 +173,7 @@ def train(args):
     seed_everything(args.seed); torch.set_num_threads(2)
     args.output_dir.mkdir(parents=True,exist_ok=True)
     checkpoint=args.output_checkpoint or args.output_dir/'models'/f'{args.model}.pt'
+    if Path(checkpoint).exists(): raise FileExistsError(f'Preserve existing checkpoint: {checkpoint}; use --output-checkpoint')
     if args.checkpoint and Path(checkpoint).resolve()==args.checkpoint.resolve():
         raise ValueError('Use a separate output checkpoint to preserve the input candidate')
     model=load_full(args.checkpoint,args.model) if args.checkpoint else FullActorCritic(args.model)
@@ -167,7 +194,7 @@ def train(args):
         with environment(args) as env:
             ep=0; obs=env.reset(seed=args.seed)
             for i in range(args.decisions):
-                label=teacher_action(obs.features)
+                label=(legacy_teacher_action if args.teacher_version=='legacy' else teacher_action)(obs.features)
                 images.append(obs.pixels); features.append(obs.features); labels.append(label); episode_ids.append(ep)
                 action=label if rng.random()<args.teacher_prob else infer(model,obs)
                 obs,_,done,info=env.step(action)
